@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 RelationValue = int | str
@@ -22,6 +22,11 @@ class BinaryOperator(Enum):
     INTERSECT = "intersect"
     MINUS = "minus"
     TIMES = "times"
+
+
+class SortDictionary(Enum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 class ASTNode:
@@ -96,6 +101,7 @@ class Project(Expression):
 class Rename(Expression):
     new_name: str
     expression: Expression
+    attribute_renames: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -117,3 +123,11 @@ class RelationDefinition(ASTNode):
     name: str
     attributes: list[str]
     rows: list[list[RelationValue]]
+
+
+@dataclass
+class Sort(Expression):
+    attribute: AttributeReference
+    direction: SortDictionary
+    expression: Expression
+    

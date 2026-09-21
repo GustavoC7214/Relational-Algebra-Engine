@@ -200,3 +200,71 @@ Result:
 - Fixed an infinite-recursion bug in `Not` formatting by recursively formatting `node.condition` instead of the `Not` node itself.
 - Used `isinstance(node, (Select, Project, Rename))` for multiple-type checks instead of `isinstance(node, Select or Project)`.
 - Qualified projection attributes preserve their relation name, for example `Member.Name`.
+
+## September 19/20, 2026 — Relational Algebra Evaluator Implementation and Testing
+
+### Goal
+
+Implement and test the relational algebra evaluator so that it can execute AST expressions produced by the parser and return the resulting relations.
+
+### What I Did
+
+I implemented the evaluator in `src/engine/evaluator.py`. The evaluator recursively processes AST nodes and uses the database to retrieve relations referenced in queries.
+
+I implemented support for the following relational algebra operations:
+
+- Selection (`select`): Filters rows based on a condition.
+- Projection (`project`): Selects specific attributes from a relation.
+- Sorting (`sort`): Orders rows by an attribute in ascending or descending order.
+- Cartesian product (`times`): Combines every row from the left relation with every row from the right relation.
+- Theta join (`join`): Combines rows from two relations when they satisfy a specified condition.
+- Union (`union`): Combines rows from two compatible relations and removes duplicates.
+- Intersection (`intersect`): Returns distinct rows that appear in both relations.
+- Difference (`minus`): Returns distinct rows that appear in the left relation but not in the right relation.
+- Rename (`rename`): Creates a relation with a new name and optionally renames individual attributes without modifying the original relation.
+
+I also implemented condition evaluation for comparison operators (`=`, `!=`, `<`, `<=`, `>`, `>=`) and Boolean operators (`and`, `or`, `not`).
+
+Attribute references can be qualified with a relation name or left unqualified. The evaluator checks for undefined and ambiguous attribute references.
+
+### Design Decisions
+
+I used recursive evaluation so that operators can be nested. For example, the evaluator can execute a selection whose input is a join between two renamed copies of the same relation.
+
+Each operation returns a `Relation` object rather than modifying the original relations stored in the database.
+
+For union, intersection, and difference, I check that the input relations have the same number of attributes and compatible column data types. The current type check compares the first row of each relation when both relations contain rows.
+
+I remove duplicate rows from the results of union, intersection, and difference.
+
+For rename, I extended the existing `Rename` AST class with an optional `attribute_renames` dictionary. The evaluator updates the relation name and attribute metadata while preserving the original row values.
+
+### Problems / AI Assistance
+
+AI assistance helped me work through the evaluator implementation using questions about each operation before writing the complete code.
+
+While implementing rename, I identified a mismatch between the existing AST field name, `new_name`, and the suggested evaluator code, which used `new_relation_name`. I corrected the evaluator to use `expression.new_name`.
+
+I also added the missing `Attribute` import required to construct renamed attributes.
+
+After completing the individual operators, I tested nested expressions involving rename, theta join, and selection to verify that the operations work together.
+
+### Testing
+
+I added tests in `tests/test_evaluator.py` to verify the behavior of the relational algebra operators and condition evaluation.
+
+The tests cover normal results, empty relations, duplicate rows, incompatible schemas, and attribute resolution.
+
+I also added tests for self-joins using two renamed copies of the same relation. One test verifies that the join correctly uses qualified attributes, while another combines the self-join with selection to exclude self-pairs and reversed duplicates.
+
+After completing the evaluator and the nested-expression tests, I ran:
+
+    python -m pytest tests/test_evaluator.py -q
+
+Result:
+
+    76 passed in 0.07s
+
+### Next Steps
+
+Connect the existing tokenizer and recursive-descent parser to the evaluator so that users can enter relational algebra queries as text, generate the corresponding AST, and execute the queries against the database.
