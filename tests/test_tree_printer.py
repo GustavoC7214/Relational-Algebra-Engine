@@ -82,3 +82,43 @@ def test_times_tree():
 └── Relation(Departments)"""
 
     assert tree == expected
+
+
+def test_sort_tree():
+    source = "sort[Age asc](Employees)"
+
+    tokens = Tokenizer(source).tokenize()
+    result = Parser(tokens).parse()
+
+    tree = print_tree(result)
+    expected = """Sort(attr=Age, direction=asc)
+└── Relation(Employees)"""
+
+    assert tree == expected
+
+
+def test_sort_qualified_attribute_tree():
+    source = "sort[Employees.Age desc](Employees)"
+
+    tokens = Tokenizer(source).tokenize()
+    result = Parser(tokens).parse()
+
+    tree = print_tree(result)
+    expected = """Sort(attr=Employees.Age, direction=desc)
+└── Relation(Employees)"""
+
+    assert tree == expected
+
+
+def test_sort_nested_tree():
+    source = "sort[Age desc](select[Age>30](Employees))"
+
+    tokens = Tokenizer(source).tokenize()
+    result = Parser(tokens).parse()
+
+    tree = print_tree(result)
+    expected = """Sort(attr=Age, direction=desc)
+└── Select(cond=Gt(Attr(Age), Num(30)))
+    └── Relation(Employees)"""
+
+    assert tree == expected

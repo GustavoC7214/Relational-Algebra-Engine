@@ -17,6 +17,8 @@ from src.parser.ast import (
     RelationReference,
     Rename,
     Select,
+    Sort,
+    SortDictionary,
     StringLiteral,
 )
 from src.parser.parser import ParseError, Parser
@@ -191,6 +193,78 @@ def test_rename_expression():
         expression=RelationReference(name="Member")
     )
 
+def test_sort_ascending():
+    tokens = Tokenizer("sort[Age asc](Member)").tokenize()
+    parser = Parser(tokens)
+    result = parser.parse()
+
+    assert result == Sort(
+        attribute=AttributeReference(name="Age"),
+        direction=SortDictionary.ASC,
+        expression=RelationReference(name="Member")
+    )
+
+
+def test_sort_descending():
+    tokens = Tokenizer("sort[Age desc](Member)").tokenize()
+    parser = Parser(tokens)
+    result = parser.parse()
+
+    assert result == Sort(
+        attribute=AttributeReference(name="Age"),
+        direction=SortDictionary.DESC,
+        expression=RelationReference(name="Member")
+    )
+
+
+def test_sort_with_qualified_attribute():
+    tokens = Tokenizer("sort[Member.Age desc](Member)").tokenize()
+    parser = Parser(tokens)
+    result = parser.parse()
+
+    assert result == Sort(
+        attribute=AttributeReference(
+            name="Age",
+            relation="Member"
+        ),
+        direction=SortDictionary.DESC,
+        expression=RelationReference(name="Member")
+    )
+
+
+def test_sort_nested_expression():
+    tokens = Tokenizer(
+        "sort[Age desc](select[Age>25](Member))"
+    ).tokenize()
+    parser = Parser(tokens)
+    result = parser.parse()
+
+    assert result == Sort(
+        attribute=AttributeReference(name="Age"),
+        direction=SortDictionary.DESC,
+        expression=Select(
+            condition=Comparison(
+                left=AttributeReference(name="Age"),
+                operator=ComparisonOperator.GREATER_THAN,
+                right=NumberLiteral(value=25)
+            ),
+            expression=RelationReference(name="Member")
+        )
+    )
+
+
+def test_sort_rejects_invalid_direction():
+    tokens = Tokenizer("sort[Age sideways](Member)").tokenize()
+
+    with pytest.raises(ParseError) as exc_info:
+        Parser(tokens).parse()
+
+    message = str(exc_info.value)
+
+    assert "asc" in message
+    assert "desc" in message
+    assert "sideways" in message
+
 def test_join_expression():
     tokens = Tokenizer(
         "Member join[Member.Place=Chapter.Location] Chapter"
@@ -362,7 +436,7 @@ def test_missing_closing_parenthesis():
 
     message = str(exc_info.value)
 
-    assert "RPAREN" in message
+    assert "Expected ')'" in message
     assert "line" in message
     assert "column" in message
 
@@ -424,3 +498,67 @@ def test_required_case_15_parentheses_override_precedence():
 
     assert isinstance(result.right, BinaryExpression)
     assert result.right.operator == BinaryOperator.INTERSECT
+
+
+def test_required_case_13_parenthesized_boolean_condition():
+    source = "select[(a=1 and b=2) or c=3](R)"
+
+    tokens = Tokenizer(source).tokenize()
+    result = Parser(tokens).parse()
+
+    assert isinstance(result, Select)
+    assert isinstance(result.condition, BooleanBinaryCondition)
+    assert result.condition.operator == BooleanOperator.OR
+
+    left = result.condition.left
+    right = result.condition.right
+
+    assert isinstance(left, BooleanBinaryCondition)
+    assert left.operator == BooleanOperator.AND
+
+    assert isinstance(left.left, Comparison)
+    assert isinstance(left.left.left, AttributeReference)
+    assert left.left.left.name == "a"
+    assert left.left.operator == ComparisonOperator.EQUAL
+    assert isinstance(left.left.right, NumberLiteral)
+    assert left.left.right.value == 1
+
+    assert isinstance(left.right, Comparison)
+    assert isinstance(left.right.left, AttributeReference)
+    assert left.right.left.name == "b"
+    assert left.right.operator == ComparisonOperator.EQUAL
+    assert isinstance(left.right.right, NumberLiteral)
+    assert left.right.right.value == 2
+
+    assert isinstance(right, Comparison)
+    assert isinstance(right.left, AttributeReference)
+    assert right.left.name == "c"
+    assert right.operator == ComparisonOperator.EQUAL
+    assert isinstance(right.right, NumberLiteral)
+    assert right.right.value == 3
+
+
+def test_required_case_2_whitespace_does_not_change_parse_tree():
+    compact = "select[x1=3](R)"
+    spaced = "select [ x1 = 3 ] ( R )"
+
+    compact_ast = Parser(Tokenizer(compact).tokenize()).parse()
+    spaced_ast = Parser(Tokenizer(spaced).tokenize()).parse()
+
+    assert compact_ast == spaced_ast
+
+
+def test_empty_projection_reports_clear_syntax_error():
+    source = "project[](R)"
+
+    tokens = Tokenizer(source).tokenize()
+
+    with pytest.raises(ParseError) as exc_info:
+        Parser(tokens).parse()
+
+    message = str(exc_info.value)
+
+    assert "Expected identifier" in message
+    assert "found ']'" in message
+    assert "line 1" in message
+    assert "column 9" in message

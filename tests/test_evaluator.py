@@ -1656,13 +1656,8 @@ def test_evaluate_union_different_attribute_names():
         right=RelationReference("Employee"),
     )
 
-    result = evaluator.evaluate(expression)
-
-    assert result.attributes == [Attribute("Member", "Name")]
-    assert result.rows == [
-        Row(["Alice"]),
-        Row(["Bob"]),
-    ]
+    with pytest.raises(ValueError, match="attribute names differ"):
+        evaluator.evaluate(expression)
 
 
 def test_evaluate_union_incompatible_data_types():
@@ -1715,8 +1710,8 @@ def test_evaluate_union_compatible_data_types():
     employees = Relation(
         "Employee",
         [
-            Attribute("Employee", "FullName"),
-            Attribute("Employee", "Years"),
+            Attribute("Employee", "Name"),
+            Attribute("Employee", "Age"),
         ],
         [Row(["Bob", 30])],
     )
@@ -1733,10 +1728,7 @@ def test_evaluate_union_compatible_data_types():
 
     result = evaluator.evaluate(expression)
 
-    assert result.attributes == [
-        Attribute("Member", "Name"),
-        Attribute("Member", "Age"),
-    ]
+    assert result.attributes == members.attributes
     assert result.rows == [
         Row(["Alice", 25]),
         Row(["Bob", 30]),
@@ -2411,3 +2403,100 @@ def test_evaluate_self_join_with_rename_and_selection():
     assert result.rows == [
         Row([1, "Alice", 25, 2, "Bob", 25]),
     ]
+
+
+def test_selection_counter_counts_examined_tuples():
+    database = Database()
+
+    relation = Relation(
+        "R",
+        [
+            Attribute("R", "a"),
+            Attribute("R", "b"),
+        ],
+        [
+            Row([0, 10]),
+            Row([1, 20]),
+            Row([2, 30]),
+            Row([3, 40]),
+            Row([4, 50]),
+        ],
+    )
+
+    database.add_relation(relation)
+    evaluator = Evaluator(database)
+
+    expression = Select(
+        condition=Comparison(
+            left=AttributeReference(name="a"),
+            operator=ComparisonOperator.GREATER_THAN,
+            right=NumberLiteral(2),
+        ),
+        expression=RelationReference("R"),
+    )
+
+    result = evaluator.evaluate(expression)
+
+    assert result.rows == [
+        Row([3, 40]),
+        Row([4, 50]),
+    ]
+    assert evaluator.selection_tuples_examined == 5
+
+
+def test_join_counter_counts_tuple_pair_comparisons():
+    database = Database()
+
+    r = Relation(
+        "R",
+        [
+            Attribute("R", "a"),
+            Attribute("R", "b"),
+        ],
+        [
+            Row([0, 0]),
+            Row([1, 1]),
+            Row([2, 2]),
+            Row([3, 3]),
+            Row([4, 4]),
+        ],
+    )
+
+    s = Relation(
+        "S",
+        [
+            Attribute("S", "b"),
+            Attribute("S", "c"),
+        ],
+        [
+            Row([0, 0]),
+            Row([0, 1]),
+            Row([1, 2]),
+            Row([1, 3]),
+            Row([2, 4]),
+            Row([2, 5]),
+            Row([3, 6]),
+            Row([3, 7]),
+            Row([4, 8]),
+            Row([4, 9]),
+        ],
+    )
+
+    database.add_relation(r)
+    database.add_relation(s)
+    evaluator = Evaluator(database)
+
+    expression = Join(
+        left=RelationReference("R"),
+        condition=Comparison(
+            left=AttributeReference(name="b", relation="R"),
+            operator=ComparisonOperator.EQUAL,
+            right=AttributeReference(name="b", relation="S"),
+        ),
+        right=RelationReference("S"),
+    )
+
+    result = evaluator.evaluate(expression)
+
+    assert len(result.rows) == 10
+    assert evaluator.join_comparisons == 50

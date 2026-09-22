@@ -14,6 +14,7 @@ from src.parser.ast import (
     RelationReference,
     Rename,
     Select,
+    Sort,
     StringLiteral,
 )
 
@@ -110,9 +111,13 @@ def format_expression(node: ASTNode) -> str:
         return operator
     elif isinstance(node, Rename):
         return f"Rename(name={node.new_name})"
+    elif isinstance(node, Sort):
+        attribute = format_attribute_name(node.attribute)
+        return f"Sort(attr={attribute}, direction={node.direction.value})"
     elif isinstance(node, Join):
         condition = format_inline(node.condition)
         return f"Join(cond={condition})"
+
 
     raise TypeError(f"Unsupported inline AST node: {type(node).__name__}")
 
@@ -120,7 +125,7 @@ def format_expression(node: ASTNode) -> str:
 def get_children(node: ASTNode) -> list[ASTNode]:
     if isinstance(node, RelationReference):
         return []
-    elif isinstance(node, (Select, Project, Rename)):
+    elif isinstance(node, (Select, Project, Rename, Sort)):
         return [node.expression]
     elif isinstance(node, (BinaryExpression, Join)):
         return [node.left, node.right]

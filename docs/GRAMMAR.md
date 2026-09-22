@@ -29,9 +29,10 @@
 - If an unquoted relation value matches `NUMBER`, it is tokenized as `NUMBER`; otherwise, it is tokenized as `BARE_STRING`.
 - `{` and `}` are excluded from bare strings because they delimit relation definitions. A string containing either brace must therefore be quoted.
 - Spaces and tabs outside of quoted strings are ignored by the tokenizer.
-- When a line starts with `//`, it is treated as a comment and is ignored by the tokenizer.
+- `//` begins a comment. The tokenizer ignores all characters from `//` to the end of the current line.
 - Empty lines are ignored by the tokenizer.
-- Newlines inside relation definitions are significant and are emitted as `NEWLINE` tokens because they separate tuples.
+- Outside relation definitions, newline characters are ignored.
+- Inside relation definitions, a newline following relation data is emitted as a `NEWLINE` token because it separates tuples. Blank lines inside relation definitions do not produce `NEWLINE` tokens.
 - The tokenizer uses maximal munch, choosing the longest valid token when multiple tokens could match the input. For example, `>=`, `<=`, and `!=` are recognized as single comparison operators.
 - Keywords can be interpreted as identifiers when the grammar expects an identifier.
 
@@ -64,7 +65,11 @@
 
 - PRODUCT_EXPR ::= PRIMARY_EXPR { ( "times" | "join" "[" CONDITION "]" ) PRIMARY_EXPR }
 
-- PRIMARY_EXPR ::= IDENT | PROJECT_EXPR | SELECT_EXPR | RENAME_EXPR | "(" EXPR ")"
+- PRIMARY_EXPR ::= IDENT | PROJECT_EXPR | SELECT_EXPR | RENAME_EXPR | SORT_EXPR | "(" EXPR ")"
+
+- SORT_DIRECTION ::= "asc" | "desc"
+
+- SORT_EXPR ::= "sort" "[" ATTRIBUTE SORT_DIRECTION "]" "(" EXPR ")"
 
 ### 1.4 Conditions
 
@@ -100,11 +105,11 @@ Relational operators follow the following precedence, from highest to lowest:
 
 | Precedence | Operators | Associativity | Grammar Rule |
 |---|---|---|---|
-| 1 (highest) | `select`, `project`, `rename` | N/A | `PRIMARY_EXPR` |
+| 1 (highest) | `select`, `project`, `rename`, `sort` | N/A | `PRIMARY_EXPR` |
 | 2 | `times`, `join[condition]` | Left | `PRODUCT_EXPR` |
 | 3 (lowest) | `union`, `intersect`, `minus` | Left | `SET_EXPR` |
 
-The unary operators `select`, `project`, and `rename` have their scope explicitly determined by the expression enclosed in their parentheses, so associativity does not apply to them.
+The unary operators `select`, `project`, `rename`, and `sort` have their scope explicitly determined by the expression enclosed in their parentheses, so associativity does not apply to them.
 
 The `PRODUCT_EXPR` rule gives `times` and `join` higher precedence than the set operators. The `SET_EXPR` rule places `union`, `intersect`, and `minus` at the lower precedence level. Repetition using `{ ... }` causes operators at the same level to be grouped from left to right by the parser.
 
@@ -240,7 +245,7 @@ SET_EXPR ::= PRODUCT_EXPR { ( "union" | "intersect" | "minus" ) PRODUCT_EXPR }
 
 PRODUCT_EXPR ::= PRIMARY_EXPR { ( "times" | "join" "[" CONDITION "]" ) PRIMARY_EXPR }
 
-PRIMARY_EXPR ::= IDENT | PROJECT_EXPR | SELECT_EXPR | RENAME_EXPR | "(" EXPR ")"
+PRIMARY_EXPR ::= IDENT | PROJECT_EXPR | SELECT_EXPR | RENAME_EXPR | SORT_EXPR | "(" EXPR ")"
 
 The `SET_EXPR` rule places `union`, `intersect`, and `minus` at the same precedence level. These operators are parsed from left to right, making them left-associative.
 
@@ -326,15 +331,15 @@ is interpreted as:
 
 ## 4. Parsing Strategy
 
-The parser will use a recursive-descent parsing strategy, with parsing functions corresponding to the major non-terminals in the EBNF grammar. Recursive descent was chosen because the stratified grammar maps naturally to separate parsing functions for each non-terminal and precedence level, making the parser straightforward to implement by hand using token lookahead without requiring a parser generator.
+The parser uses a recursive-descent parsing strategy, with parsing functions corresponding to the major non-terminals in the EBNF grammar. Recursive descent was chosen because the stratified grammar maps naturally to separate parsing functions for each non-terminal and precedence level, making the parser straightforward to implement by hand using token lookahead without requiring a parser generator.
 
-Separate parsing functions will be used for each precedence level. Relational expressions will follow this structure:
+Separate parsing functions are used for each precedence level. Relational expressions follow this structure:
 
 `parseExpr() → parseSetExpr() → parseProductExpr() → parsePrimaryExpr()`
 
 This ensures that `times` and `join` are parsed before `union`, `intersect`, and `minus`.
 
-Conditions will use the same strategy:
+Conditions use the same strategy:
 
 `parseCondition() → parseOrCondition() → parseAndCondition() → parseNotCondition() → parseConditionPrimary() → parseComparison()`
 
@@ -352,7 +357,7 @@ is constructed as:
 
 When `parsePrimaryExpr()` encounters an opening parenthesis, it consumes the `(` and recursively calls `parseExpr()` to parse the expression inside. It then requires a matching `)`. This allows parentheses to override normal operator precedence and supports nested parenthesized expressions.
 
-The parser uses token lookahead to inspect the current token and determine which grammar production should be parsed. Tokens are consumed as they are successfully matched. For example, `parsePrimaryExpr()` uses the current token to determine whether it should parse an identifier, selection, projection, rename operation, or parenthesized expression.
+The parser uses token lookahead to inspect the current token and determine which grammar production should be parsed. Tokens are consumed as they are successfully matched. For example, `parsePrimaryExpr()` uses the current token to determine whether it should parse an identifier, selection, projection, rename operation, sort operation, or parenthesized expression.
 
 If the parser encounters a token that does not match what is required by the grammar, it reports a syntax error identifying the unexpected token and, when possible, the expected token or construct. For example:
 

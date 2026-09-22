@@ -20,6 +20,8 @@ from src.parser.ast import (
     RelationValue,
     Rename,
     Select,
+    Sort,
+    SortDictionary,
     StringLiteral,
 )
 
@@ -117,6 +119,10 @@ class Parser:
               and self.peek_next().type == TokenType.LBRACKET
               ):
             return self.parse_rename_expression()
+        elif (self.check_keyword("sort")
+              and self.peek_next().type == TokenType.LBRACKET
+        ):
+            return self.parse_sort_expression()
         
 
         if self.match(TokenType.LPAREN):
@@ -131,6 +137,31 @@ class Parser:
         raise ParseError(
             f"Expected expression, but found {token.type},"
             f'at line {token.position.line}, column {token.position.column}'
+        )
+
+    def parse_sort_expression(self) -> Expression:
+        self.match_keyword("sort")
+        self.expect(TokenType.LBRACKET)
+
+        attribute = self.parse_attribute()
+        direction_token = self.expect(TokenType.IDENTIFIER)
+
+        if direction_token.value not in ("asc", "desc"):
+            raise ParseError(
+                f"Expected 'asc' or 'desc', but found '{direction_token.value}' "
+                f"at line {direction_token.position.line}, "
+                f"column {direction_token.position.column}"
+            )
+
+        self.expect(TokenType.RBRACKET)
+        self.expect(TokenType.LPAREN)
+        expression = self.parse_expression()
+        self.expect(TokenType.RPAREN)
+
+        return Sort(
+            attribute=attribute,
+            direction=SortDictionary(direction_token.value),
+            expression=expression,
         )
     
     def parse_select_expression(self) -> Expression:
@@ -374,11 +405,13 @@ class Parser:
             return self.advance()
 
         token = self.peek()
+
+        expected = self.token_display_name(token_type)
+        found = self.token_display_name(token.type)
+
         raise ParseError(
-            f"Expected {token_type},"
-            f"but found {token.type} at"
-            f"line  {token.position.line}"
-            f"column {token.position.column}"
+            f"Expected {expected} but found {found} "
+            f"at line {token.position.line}, column {token.position.column}"
         )
 
     def check_keyword(self, keyword: str) -> bool:
@@ -389,3 +422,24 @@ class Parser:
             self.advance()
             return True
         return False
+
+    def token_display_name(self, token_type: TokenType) -> str:
+        names = {
+            TokenType.LPAREN: "'('",
+            TokenType.RPAREN: "')'",
+            TokenType.LBRACKET: "'['",
+            TokenType.RBRACKET: "']'",
+            TokenType.LBRACE: "'{'",
+            TokenType.RBRACE: "'}'",
+            TokenType.COMMA: "','",
+            TokenType.DOT: "'.'",
+            TokenType.IDENTIFIER: "identifier",
+            TokenType.NUMBER: "number",
+            TokenType.STRING: "string",
+            TokenType.BARE_STRING: "string",
+            TokenType.COMPARISON_OPERATOR: "comparison operator",
+            TokenType.NEWLINE: "newline",
+            TokenType.EOF: "end of input",
+        }
+
+        return names.get(token_type, token_type.name.lower())
