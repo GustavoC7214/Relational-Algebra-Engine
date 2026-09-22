@@ -37,6 +37,17 @@ project[a](R)
 
 Both queries return all `n` generated tuples. The selection benchmark records the number of input tuples examined; the join benchmark records the number of tuple-pair comparisons.
 
+### 2.1 Benchmark Result Files
+
+The raw measurements used in this report are included with the project as CSV files:
+
+- `performance_results.csv` — join scaling results for `n = m` from 1,000 to 64,000 tuples.
+- `selection_results.csv` — selection measurements over the same seven input sizes.
+- `projection_results.csv` — projection measurements over the same seven input sizes.
+- `match_rate_results.csv` — join measurements with `n = m = 1,000` and match rates of 1, 2, 4, and 8.
+
+The tables in Sections 3, 4, and 5 are based on these recorded measurements.
+
 ## 3. Join Scaling Results
 
 The nested-loop join was benchmarked with `n = m` at seven input sizes. The match rate was fixed at 1, producing `n` output tuples in each experiment.
