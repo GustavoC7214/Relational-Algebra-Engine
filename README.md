@@ -1,45 +1,55 @@
 # Relational Algebra Engine
 
-A hand-written relational algebra query processor built in Python.
+A hand-written relational algebra query processor built in Python for COMP 3005 — Database Management Systems at Carleton University.
 
-The project implements a small relational algebra language from the ground up, including lexical analysis, parsing, relational expression representation, and eventually query execution. The language supports relation definitions, relational algebra operators, Boolean conditions, quoted and unquoted values, comments, and source-position-aware error reporting.
+The engine tokenizes and parses a small relational algebra language, builds an abstract syntax tree (AST), and evaluates queries against relations loaded from a text file. It supports nested expressions, set operations, theta joins, Boolean conditions, parse-tree output, and source-position-aware error reporting.
 
-The project is being developed as part of COMP 3005 — Database Management Systems at Carleton University.
+The tokenizer and recursive-descent parser are implemented manually without regular expressions, parser generators, `eval`, or `exec`.
 
-## Project Status
+## Requirements and Setup
 
-The project is currently under development.
+Python 3 is required. The project was benchmarked using Python 3.14.6.
 
-### Completed
+From the project root, create and activate a virtual environment:
 
-- EBNF grammar design
-- Operator precedence and associativity rules
-- Hand-written tokenizer
-- Source position tracking
-- Lexical error reporting
-- Relation-definition tokenization
-- Comment handling
-- Quoted and bare string handling
-- Automated tokenizer test suite
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-### Currently In Progress
+Install pytest to run the automated tests:
 
-- Abstract Syntax Tree (AST) design
-- Recursive-descent parser
+```bash
+python -m pip install pytest
+```
 
-### Planned
+The query processor itself uses the Python standard library. Matplotlib is needed only if you want to regenerate the performance plot:
 
-- Relational algebra execution engine
-- Semantic validation
-- Relation storage and manipulation
-- Query evaluation
-- Parser and semantic test suites
+```bash
+python -m pip install matplotlib
+```
 
----
+## Running Queries
 
-## Supported Language
+The command-line entry point is `ra.py`. Run the following commands from the project root.
 
-The language is designed to support relation definitions such as:
+Load the example relations and execute a query:
+
+```bash
+python ra.py --file tests/relations.ra "project[Name, Age](select[Age>25](Member))"
+```
+
+Print a query's parse tree without evaluating it:
+
+```bash
+python ra.py --tree "project[Name](select[Age>25](Member))"
+```
+
+The `--tree` option does not require a relation file.
+
+### Relation Definitions
+
+Relations can be defined in a text file using the following format:
 
 ```text
 Employees (EID, Name, Age, DID) = {
@@ -49,424 +59,115 @@ E3, Bob, 29, D1
 }
 ```
 
-### Unary Relational Operators
+Relation definitions support quoted and unquoted values, comments, and multiline input.
 
-Selection:
+### Supported Operations
 
-```text
-select[Age>=30](Employees)
-```
+| Operation | Example |
+|---|---|
+| Selection | `select[Age>=30](Employees)` |
+| Projection | `project[Name, Age](Employees)` |
+| Rename | `rename[Staff](Employees)` |
+| Sorting | `sort[Age desc](Employees)` |
+| Union | `R union S` |
+| Intersection | `R intersect S` |
+| Difference | `R minus S` |
+| Cartesian product | `R times S` |
+| Theta join | `Employees join[Employees.DID=Departments.DID] Departments` |
 
-Projection:
-
-```text
-project[Name, Age](Employees)
-```
-
-Rename:
-
-```text
-rename[Staff](Employees)
-```
-
-### Binary Relational Operators
-
-Union:
-
-```text
-Employees union Managers
-```
-
-Intersection:
-
-```text
-R intersect S
-```
-
-Difference:
-
-```text
-R minus S
-```
-
-Cartesian product:
-
-```text
-R times S
-```
-
-Theta join:
-
-```text
-Employees join[Employees.DID=Departments.DID] Departments
-```
-
-### Boolean Conditions
-
-Conditions support the following comparison and Boolean operators:
-
-- `=`
-- `!=`
-- `<`
-- `<=`
-- `>`
-- `>=`
-- `not`
-- `and`
-- `or`
-- Parentheses
+Expressions can be nested. Conditions support `=`, `!=`, `<`, `<=`, `>`, `>=`, `not`, `and`, `or`, and parentheses.
 
 For example:
 
 ```text
-select[Age>=30 and Name!='Bob'](Employees)
+project[Name](select[Age>=30 and Name!='Bob'](Employees))
 ```
 
-Conditions use the following precedence, from highest to lowest:
+Relational and Boolean operator precedence, associativity, and the complete EBNF grammar are documented in [`docs/GRAMMAR.md`](docs/GRAMMAR.md).
 
-1. Comparison operators
-2. `not`
-3. `and`
-4. `or`
+## Errors
 
----
+The command-line interface distinguishes lexical, syntax, name, schema, type, file, and usage errors.
 
-## Relational Operator Precedence
+The tokenizer records source positions so lexical errors can identify where an invalid character or unterminated string occurs.
 
-Relational expressions use the following precedence, from highest to lowest:
+## Running Tests
 
-1. `select`, `project`, `rename`, and parenthesized expressions
-2. `times` and `join`
-3. `union`, `intersect`, and `minus`
+From the project root, run the complete automated test suite:
 
-Binary operators at the same precedence level are left-associative.
-
-For example:
-
-```text
-A union B minus C
+```bash
+python -m pytest tests/ -q
 ```
 
-is interpreted as:
+The tests cover tokenization, parsing, AST tree printing, relations, database operations, query evaluation, query-processor integration, command-line behavior, and data generation.
 
-```text
-(A union B) minus C
-```
+## Performance Evaluation
 
-while:
+The project includes a data generator and benchmark runner for join, selection, and projection experiments.
 
-```text
-R union S times T
-```
+The completed benchmark results are saved in:
 
-is interpreted as:
+- `performance_results.csv` — join scaling measurements
+- `selection_results.csv` — selection scaling measurements
+- `projection_results.csv` — projection scaling measurements
+- `match_rate_results.csv` — join measurements at different match rates
 
-```text
-R union (S times T)
-```
+The performance analysis, measured results, extrapolation, and limitations are documented in [`docs/REPORT.md`](docs/REPORT.md). The join scaling plot is saved as [`join_scaling.png`](join_scaling.png).
 
----
+The supporting scripts are:
 
-## Tokenizer
+- `data_generator.py` — generates benchmark relations
+- `performance_runner.py` — runs performance experiments
+- `analyze_performance.py` — calculates the join scaling slope and extrapolation
+- `plot_performance.py` — generates the join scaling plot
 
-The tokenizer is implemented manually and scans the source code character by character. It does not use regular expressions, parser generators, `eval`, or `exec`.
-
-It currently recognizes:
-
-- Identifiers
-- Numbers
-- Negative numbers
-- Quoted strings
-- Bare strings in relation data
-- Parentheses
-- Braces
-- Brackets
-- Commas
-- Dots
-- Comparison operators
-- Significant newlines in relation definitions
-- `//` comments
-- End-of-file
-
-### Maximal Munch
-
-Multi-character comparison operators are recognized using maximal munch.
-
-For example:
-
-```text
-Age>=30
-```
-
-produces `>=` as one comparison operator.
-
-However:
-
-```text
-Age>-30
-```
-
-produces `>` and `-30` separately. There is no `>-` operator.
-
-### Strings
-
-Quoted strings use single quotes:
-
-```text
-'John Smith'
-```
-
-Characters such as commas and parentheses are allowed inside quoted strings:
-
-```text
-'a,b'
-'Bob)'
-```
-
-A doubled single quote represents a literal quote:
-
-```text
-'O''Brien'
-```
-
-which is tokenized with the string value:
-
-```text
-O'Brien
-```
-
-### Bare Relation Values
-
-Unquoted values inside relation definitions are scanned as complete values before being classified.
-
-For example:
-
-```text
-123
-```
-
-is a number, while:
-
-```text
-123abc
-```
-
-is one bare string rather than a number followed by another token.
-
-### Keywords
-
-Keywords are not given separate token types.
-
-Words such as:
-
-```text
-select
-project
-union
-and
-or
-```
-
-are initially tokenized as identifiers. The parser will interpret them according to their grammatical context.
-
-This allows expressions such as:
-
-```text
-select[union=3](R)
-```
-
-where `union` is being used as an attribute name.
-
----
-
-## Source Positions and Errors
-
-Every token stores its source position:
-
-- Character index
-- Line
-- Column
-
-Indexes are zero-based, while line and column numbers are one-based.
-
-Invalid characters produce a lexical error containing the source position.
-
-For example, because identifiers must begin with an ASCII letter:
-
-```text
-_Employee
-```
-
-produces a lexical error at line 1, column 1.
-
-Similarly, an unterminated string such as:
-
-```text
-select[Name='Bob](R)
-```
-
-produces a lexical error pointing to the opening quote.
-
-The tokenizer only handles lexical validity. Grammatically invalid token sequences are left for the parser.
-
-For example:
-
-```text
-select[Age=](R)
-```
-
-can be tokenized successfully but will eventually be rejected by the parser because the comparison is missing its right-hand operand.
-
----
+**Note:** `performance_runner.py` currently runs whichever experiment is selected in its `main()` function. Running the full join-scaling experiment can take a long time; the completed measurements are already included in the CSV files.
 
 ## Project Structure
 
 ```text
 Relational-Algebra-Engine/
 ├── docs/
-├── generator/
+│   ├── DESIGN_LOG.md
+│   ├── GRAMMAR.md
+│   └── REPORT.md
 ├── src/
 │   ├── engine/
+│   │   ├── database.py
+│   │   ├── evaluator.py
+│   │   ├── query_processor.py
+│   │   └── relation.py
 │   ├── lexer/
-│   │   ├── __init__.py
 │   │   ├── token.py
 │   │   └── tokenizer.py
 │   └── parser/
+│       ├── ast.py
+│       ├── parser.py
+│       └── tree_printer.py
 ├── tests/
-│   └── test_tokenizer.py
-├── DESIGN_LOG.md
-├── GRAMMAR.md
+│   ├── relations.ra
+│   ├── test_cli.py
+│   ├── test_data_generator.py
+│   ├── test_database.py
+│   ├── test_evaluator.py
+│   ├── test_parser.py
+│   ├── test_query_processor.py
+│   ├── test_relation.py
+│   ├── test_tokenizer.py
+│   └── test_tree_printer.py
+├── analyze_performance.py
+├── data_generator.py
+├── performance_runner.py
+├── plot_performance.py
+├── ra.py
+├── join_scaling.png
+├── performance_results.csv
+├── selection_results.csv
+├── projection_results.csv
+├── match_rate_results.csv
 └── README.md
 ```
 
-### `src/lexer/token.py`
+## Development Documentation
 
-Defines:
-
-- `TokenType`
-- `SourcePosition`
-- `Token`
-
-### `src/lexer/tokenizer.py`
-
-Contains the hand-written tokenizer and `LexicalError`.
-
-### `src/parser/`
-
-Reserved for the recursive-descent parser and AST implementation.
-
-### `src/engine/`
-
-Reserved for relational algebra evaluation and semantic processing.
-
-### `GRAMMAR.md`
-
-Contains the EBNF grammar, precedence and associativity rules, ambiguity analysis, parsing strategy, and grammar-design notes.
-
-### `DESIGN_LOG.md`
-
-Documents development decisions, problems encountered, testing, and AI assistance throughout the project.
-
----
-
-## Testing
-
-The tokenizer is tested using `pytest`.
-
-### Set Up the Virtual Environment
-
-Create a virtual environment:
-
-```bash
-python3 -m venv .venv
-```
-
-Activate it on macOS or Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-Install pytest:
-
-```bash
-python3 -m pip install pytest
-```
-
-### Run the Tests
-
-From the project root:
-
-```bash
-python3 -m pytest
-```
-
-Current tokenizer test status:
-
-```text
-16 passed
-```
-
-The test suite contains all nine required tokenizer cases as well as regression tests for issues discovered during development.
-
-Current regression coverage includes:
-
-- Alphanumeric bare relation values such as `123abc`
-- Quoted-only relation tuples
-- Comment-only lines
-- Inline comments without preceding whitespace
-- Non-ASCII identifiers
-- Identifiers beginning with `_`
-- Standalone `!`
-
----
-
-## Parsing Strategy
-
-The parser will use recursive descent.
-
-The grammar has been structured into precedence levels so that each level can map naturally to a parsing function.
-
-Relational expressions follow the general structure:
-
-```text
-parseExpr
-    → parseSetExpr
-        → parseProductExpr
-            → parsePrimaryExpr
-```
-
-Conditions similarly use separate parsing levels for:
-
-```text
-or
-and
-not
-comparison
-```
-
-Left recursion was removed from the grammar so that the recursive-descent parser always consumes input before recursively processing additional expressions.
-
----
-
-## Next Steps
-
-The next development phase is the AST and recursive-descent parser.
-
-The AST and parser will need to represent:
-
-- Relation references
-- Selection
-- Projection
-- Rename
-- Union
-- Intersection
-- Difference
-- Cartesian product
-- Theta join
-- Comparisons
-- Boolean `not`
-- Boolean `and`
-- Boolean `or`
-
-After parsing is complete, development will move to semantic validation and execution of relational algebra expressions.
+[`docs/DESIGN_LOG.md`](docs/DESIGN_LOG.md) records the implementation decisions, testing, problems encountered, and AI assistance used during development.
